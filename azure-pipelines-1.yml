@@ -1,7 +1,5 @@
 pool:
   name: MyAzurVM
-  demands:
-  - Agent.OS -equals Windows_NT
 
 trigger:
 - master   # change if your branch is main
@@ -11,42 +9,44 @@ variables:
   publishDir: '$(Build.ArtifactStagingDirectory)\publish'
   sitePath: 'C:\inetpub\wwwroot\MyFirstwebAPI'
   appPool:  'MyFirstwebAPI'
+  project: '**/*.csproj'    # or set to your Web API .csproj path
 
 steps:
-# Install the exact SDK requested by your repo (global.json), incl. previews if needed
-- task: UseDotNet@2
-  displayName: 'Install .NET SDK from global.json'
-  inputs:
-    packageType: 'sdk'
-    useGlobalJson: true
-    includePreviewVersions: true
+# Verify the SDK your agent already has
+- powershell: |
+    $cmd = Get-Command dotnet -ErrorAction SilentlyContinue
+    if (-not $cmd) {
+      Write-Error "dotnet SDK not found in PATH. Install it system-wide or add 'C:\Program Files\dotnet' to PATH for the agent service."
+      exit 1
+    }
+    dotnet --info
+  displayName: 'Verify .NET SDK on agent'
 
-# If you DON'T have a global.json, comment the block above and use this instead:
-# - task: UseDotNet@2
-#   inputs:
-#     packageType: 'sdk'
-#     version: '8.x'
+# (Safe even if you only use nuget.org)
+- task: NuGetAuthenticate@1
+  displayName: 'Authenticate NuGet feeds'
 
 - task: DotNetCoreCLI@2
   displayName: 'Restore'
   inputs:
     command: 'restore'
-    projects: '**/*.csproj'
+    projects: '$(project)'
+    arguments: '--verbosity minimal'
 
 - task: DotNetCoreCLI@2
   displayName: 'Build'
   inputs:
     command: 'build'
-    projects: '**/*.csproj'
-    arguments: '--configuration $(buildConfiguration)'
+    projects: '$(project)'
+    arguments: '--configuration $(buildConfiguration) --no-restore'
 
 - task: DotNetCoreCLI@2
   displayName: 'Publish'
   inputs:
     command: 'publish'
     publishWebProjects: false
-    projects: '**/*.csproj'
-    arguments: '--configuration $(buildConfiguration) --output $(publishDir)'
+    projects: '$(project)'
+    arguments: '--configuration $(buildConfiguration) --no-build --output $(publishDir)'
     zipAfterPublish: false
 
 - task: PublishBuildArtifacts@1
