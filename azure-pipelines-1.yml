@@ -4,39 +4,59 @@ pool:
   - Agent.OS -equals Windows_NT
 
 trigger:
-- master
+- master   # change if your branch is main
 
 variables:
   buildConfiguration: 'Release'
-  dotnetVersion: '8.x'
-  project: '**/*.csproj'
   publishDir: '$(Build.ArtifactStagingDirectory)\publish'
-  sitePath: 'C:\inetpub\wwwroot\MyFirstwebAPI'   # << your path
-  appPool: 'MyFirstwebAPI'                       # << your app pool
+  sitePath: 'C:\inetpub\wwwroot\MyFirstwebAPI'
+  appPool:  'MyFirstwebAPI'
 
 steps:
+# Install the exact SDK requested by your repo (global.json), incl. previews if needed
 - task: UseDotNet@2
+  displayName: 'Install .NET SDK from global.json'
   inputs:
     packageType: 'sdk'
-    version: '$(dotnetVersion)'
-  displayName: 'Install .NET SDK'
+    useGlobalJson: true
+    includePreviewVersions: true
 
-- script: dotnet restore $(project)
+# If you DON'T have a global.json, comment the block above and use this instead:
+# - task: UseDotNet@2
+#   inputs:
+#     packageType: 'sdk'
+#     version: '8.x'
+
+- task: DotNetCoreCLI@2
   displayName: 'Restore'
+  inputs:
+    command: 'restore'
+    projects: '**/*.csproj'
 
-- script: dotnet build $(project) --configuration $(buildConfiguration) --no-restore
+- task: DotNetCoreCLI@2
   displayName: 'Build'
+  inputs:
+    command: 'build'
+    projects: '**/*.csproj'
+    arguments: '--configuration $(buildConfiguration)'
 
-- script: dotnet publish $(project) --configuration $(buildConfiguration) --output "$(publishDir)" --no-build
+- task: DotNetCoreCLI@2
   displayName: 'Publish'
+  inputs:
+    command: 'publish'
+    publishWebProjects: false
+    projects: '**/*.csproj'
+    arguments: '--configuration $(buildConfiguration) --output $(publishDir)'
+    zipAfterPublish: false
 
 - task: PublishBuildArtifacts@1
+  displayName: 'Publish artifact'
   inputs:
     PathtoPublish: '$(publishDir)'
     ArtifactName: 'drop'
-  displayName: 'Publish artifact'
   condition: succeeded()
 
+# === Deploy to IIS on the SAME VM ===
 - task: PowerShell@2
   displayName: 'Deploy to IIS (stop-copy-start)'
   inputs:
