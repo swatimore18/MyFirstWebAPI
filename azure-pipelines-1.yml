@@ -1,10 +1,10 @@
 pool:
-  name: MyAzurVM
+  name: MyAzurVM              # <-- your self-hosted pool name
   demands:
   - Agent.OS -equals Windows_NT
 
 trigger:
-- main   # or your branch
+- master                      # or main, match your branch
 
 steps:
 - script: echo "Hello from $(Agent.Name) on $(Agent.MachineName)"
