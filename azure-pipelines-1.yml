@@ -1,0 +1,11 @@
+pool:
+  name: MyAzurVM
+  demands:
+  - Agent.OS -equals Windows_NT
+
+trigger:
+- main   # or your branch
+
+steps:
+- script: echo "Hello from $(Agent.Name) on $(Agent.MachineName)"
+  displayName: 'Smoke test'
