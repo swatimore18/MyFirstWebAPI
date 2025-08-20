@@ -1,11 +1,52 @@
 pool:
-  name: MyAzurVM              # <-- your self-hosted pool name
+  name: MyAzurVM
   demands:
   - Agent.OS -equals Windows_NT
 
 trigger:
-- master                      # or main, match your branch
+- master
+
+variables:
+  buildConfiguration: 'Release'
+  dotnetVersion: '8.x'
+  project: '**/*.csproj'
+  publishDir: '$(Build.ArtifactStagingDirectory)\publish'
+  sitePath: 'C:\inetpub\wwwroot\MyFirstwebAPI'   # << your path
+  appPool: 'MyFirstwebAPI'                       # << your app pool
 
 steps:
-- script: echo "Hello from $(Agent.Name) on $(Agent.MachineName)"
-  displayName: 'Smoke test'
+- task: UseDotNet@2
+  inputs:
+    packageType: 'sdk'
+    version: '$(dotnetVersion)'
+  displayName: 'Install .NET SDK'
+
+- script: dotnet restore $(project)
+  displayName: 'Restore'
+
+- script: dotnet build $(project) --configuration $(buildConfiguration) --no-restore
+  displayName: 'Build'
+
+- script: dotnet publish $(project) --configuration $(buildConfiguration) --output "$(publishDir)" --no-build
+  displayName: 'Publish'
+
+- task: PublishBuildArtifacts@1
+  inputs:
+    PathtoPublish: '$(publishDir)'
+    ArtifactName: 'drop'
+  displayName: 'Publish artifact'
+  condition: succeeded()
+
+- task: PowerShell@2
+  displayName: 'Deploy to IIS (stop-copy-start)'
+  inputs:
+    targetType: 'inline'
+    script: |
+      Import-Module WebAdministration
+      $pool = "$(appPool)"
+      $dst  = "$(sitePath)"
+      if (!(Test-Path $dst)) { New-Item -ItemType Directory -Path $dst -Force | Out-Null }
+      Set-ItemProperty "IIS:\AppPools\$pool" -Name managedRuntimeVersion -Value '' -ErrorAction SilentlyContinue
+      Stop-WebAppPool -Name $pool -ErrorAction SilentlyContinue
+      robocopy "$(publishDir)" "$dst" /MIR /R:2 /W:2 | Out-Null
+      Start-WebAppPool -Name $pool
